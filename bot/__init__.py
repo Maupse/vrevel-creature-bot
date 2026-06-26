@@ -1,0 +1,1 @@
+"""vrevel-creature-bot package."""

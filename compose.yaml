@@ -1,0 +1,12 @@
+name: vrevel-creature-bot
+
+services:
+  bot:
+    build:
+      context: .
+    image: vrevel-creature-bot:latest
+    container_name: vrevel-creature-bot
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env

@@ -1,0 +1,50 @@
+name: Validate and publish deploy branch
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vrevel-creature-bot-deploy
+  cancel-in-progress: true
+
+jobs:
+  validate-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --requirement requirements.txt
+
+      - name: Check Python syntax
+        run: python -m compileall -q bot
+
+      - name: Prepare Compose environment
+        run: cp .env.example .env
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build Docker image
+        run: docker compose build
+
+      - name: Publish validated commit to deploy branch
+        run: |
+          set -Eeuo pipefail
+          git push --force origin HEAD:refs/heads/deploy
