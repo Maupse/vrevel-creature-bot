@@ -1,28 +1,8 @@
 # vrevel-creature-bot
 
-Minimal `discord.py` bot deployed to a Raspberry Pi with Docker Compose.
+Minimal Discord bot built with Python, `discord.py`, Docker Compose, and automatic deployment to a Raspberry Pi.
 
-Deployment model:
-
-```text
-push to main
-      |
-      v
-GitHub Actions validates Python and Docker
-      |
-      v
-validated commit is force-pushed to deploy
-      |
-      v
-Pi cron job fetches deploy
-      |
-      v
-docker compose up -d --build
-```
-
-The Pi does not need to accept connections from GitHub. It pulls from GitHub using its normal outbound network connection, so manual SSH may remain behind Cloudflare Tunnel.
-
-## Structure
+## Project structure
 
 ```text
 vrevel-creature-bot/
@@ -31,9 +11,10 @@ vrevel-creature-bot/
 │       └── deploy.yml
 ├── bot/
 │   ├── __init__.py
-│   └── main.py
-├── scripts/
-│   └── sync-deploy.sh
+│   ├── main.py
+│   └── extensions/
+│       ├── __init__.py
+│       └── general.py
 ├── .dockerignore
 ├── .env.example
 ├── .gitignore
@@ -43,94 +24,368 @@ vrevel-creature-bot/
 └── requirements.txt
 ```
 
-## 1. Create and push the GitHub repository
+The structure has three important levels:
 
-Create an empty GitHub repository named `vrevel-creature-bot`, then run locally:
-
-```bash
-git init -b main
-git add .
-git commit -m "Initial vrevel-creature bot"
-git remote add origin git@github.com:YOUR_GITHUB_USERNAME/vrevel-creature-bot.git
-git push -u origin main
+```text
+bot/main.py
+    loads
+        ↓
+bot/extensions/general.py          ← Discord.py extension
+    contains
+        ↓
+class General(commands.Cog)        ← cog
+    contains
+        ↓
+/ping, /about, ...                 ← commands
 ```
 
-Replace `YOUR_GITHUB_USERNAME` with your actual GitHub username.
+### What is a Discord.py extension?
 
-The first successful workflow run creates the `deploy` branch. Do not manually edit that branch. If branch protection is enabled for `deploy`, it must permit this workflow's force-push, or the publish step will fail.
+An **extension** is an importable Python module that the bot can load.
 
-## 2. Clone the deploy branch on the Pi
+In this project, this file is an extension:
 
-After the first workflow succeeds:
-
-```bash
-mkdir -p ~/apps
-git clone --branch deploy \
-  git@github.com:YOUR_GITHUB_USERNAME/vrevel-creature-bot.git \
-  ~/apps/vrevel-creature-bot
-
-cd ~/apps/vrevel-creature-bot
+```text
+bot/extensions/general.py
 ```
 
-For a private repository, configure a read-only GitHub deploy key on the Pi before cloning.
+It is loaded by its module path:
 
-## 3. Create the Pi-only environment file
+```python
+await bot.load_extension("bot.extensions.general")
+```
+
+Every extension must expose an asynchronous `setup` function:
+
+```python
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(General(bot))
+```
+
+An extension is the unit used to organize and load a feature area. It may contain commands, cogs, event listeners, or background tasks.
+
+### What is a cog?
+
+A **cog** is a class that groups related Discord functionality.
+
+```python
+class General(commands.Cog):
+    ...
+```
+
+For example, the `General` cog can contain:
+
+```text
+/ping
+/about
+/hello
+```
+
+A future `Creatures` cog could contain:
+
+```text
+/creature
+/feed
+/stats
+```
+
+The distinction is:
+
+```text
+extension = Python module/file loaded by the bot
+cog       = class inside the extension
+command   = method inside the cog
+```
+
+For a small bot, use one cog per extension file. This keeps the mapping obvious:
+
+```text
+extensions/general.py    → General cog
+extensions/creatures.py  → Creatures cog
+extensions/admin.py      → Admin cog
+```
+
+## Core files
+
+### `bot/main.py`
+
+`main.py` starts the bot, loads extensions, and synchronizes slash commands to the configured Discord server.
+
+```python
+import logging
+import os
+
+import discord
+from discord.ext import commands
+
+
+TOKEN = os.environ["DISCORD_TOKEN"]
+GUILD_ID = int(os.environ["DISCORD_GUILD_ID"])
+
+EXTENSIONS = (
+    "bot.extensions.general",
+)
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+logger = logging.getLogger("vrevel_creature_bot")
+
+
+class VrevelCreatureBot(commands.Bot):
+    def __init__(self) -> None:
+        super().__init__(
+            command_prefix=commands.when_mentioned,
+            intents=discord.Intents.default(),
+        )
+
+    async def setup_hook(self) -> None:
+        for extension in EXTENSIONS:
+            await self.load_extension(extension)
+            logger.info("Loaded extension %s", extension)
+
+        guild = discord.Object(id=GUILD_ID)
+
+        # Make the commands available immediately in this server.
+        self.tree.copy_global_to(guild=guild)
+        synced = await self.tree.sync(guild=guild)
+
+        logger.info(
+            "Synced %d command(s) to guild %d",
+            len(synced),
+            GUILD_ID,
+        )
+
+    async def on_ready(self) -> None:
+        logger.info(
+            "Logged in as %s (id=%s)",
+            self.user,
+            self.user.id if self.user else None,
+        )
+
+
+def main() -> None:
+    bot = VrevelCreatureBot()
+    bot.run(TOKEN, log_handler=None)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### `bot/extensions/general.py`
+
+`general.py` contains small general-purpose commands.
+
+```python
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+
+class General(commands.Cog):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+
+    @app_commands.command(
+        name="ping",
+        description="Check whether the bot is online.",
+    )
+    async def ping(self, interaction: discord.Interaction) -> None:
+        latency_ms = round(self.bot.latency * 1000)
+
+        await interaction.response.send_message(
+            f"Pong! `{latency_ms} ms`",
+            ephemeral=True,
+        )
+
+    @app_commands.command(
+        name="about",
+        description="Show information about the bot.",
+    )
+    async def about(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
+            "I am vrevel-creature.",
+            ephemeral=True,
+        )
+
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(General(bot))
+```
+
+The empty `__init__.py` files make `bot` and `bot.extensions` importable Python packages.
+
+## Adding commands
+
+### Add a related command
+
+Add it to the existing cog.
+
+For example, add `/hello` inside the `General` class in `bot/extensions/general.py`:
+
+```python
+@app_commands.command(
+    name="hello",
+    description="Receive a greeting.",
+)
+async def hello(self, interaction: discord.Interaction) -> None:
+    await interaction.response.send_message(
+        f"Hello, {interaction.user.mention}!"
+    )
+```
+
+### Add a new feature area
+
+Create a new extension when commands belong to a distinct feature.
+
+```text
+bot/extensions/creatures.py
+```
+
+```python
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+
+class Creatures(commands.Cog):
+    @app_commands.command(
+        name="creature",
+        description="Summon a creature.",
+    )
+    async def creature(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message("A creature appeared!")
+
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(Creatures())
+```
+
+Register the extension in `bot/main.py`:
+
+```python
+EXTENSIONS = (
+    "bot.extensions.general",
+    "bot.extensions.creatures",
+)
+```
+
+### Growth rule
+
+Keep the structure small until the code requires another layer:
+
+| Situation | Action |
+|---|---|
+| A new command belongs to an existing feature | Add it to the existing cog |
+| Several commands form a distinct feature | Create a new extension and cog |
+| A command contains substantial reusable logic | Move that logic into a service module later |
+| Code is used by only one short command | Keep it in the extension |
+
+Do not add `services/`, `utils/`, repositories, or database abstractions before there is real logic to place there.
+
+## Environment configuration
+
+The Pi-only environment file is:
+
+```text
+/home/ubuntu/apps/vrevel-creature-bot/.env
+```
+
+Create it with:
 
 ```bash
-cd ~/apps/vrevel-creature-bot
+cd /home/ubuntu/apps/vrevel-creature-bot
 cp .env.example .env
 nvim .env
 chmod 600 .env
 ```
 
-Set:
+Contents:
 
 ```dotenv
-DISCORD_TOKEN=your-real-token
-DISCORD_GUILD_ID=your-numeric-server-id
+DISCORD_TOKEN=your-real-discord-bot-token
+DISCORD_GUILD_ID=your-numeric-discord-server-id
 LOG_LEVEL=INFO
 ```
 
-## 4. Test the first deployment
+The `.env` file must not be committed.
+
+## Docker
+
+Build and start the bot:
 
 ```bash
-cd ~/apps/vrevel-creature-bot
-./scripts/sync-deploy.sh
+cd /home/ubuntu/apps/vrevel-creature-bot
+docker compose up -d --build
 ```
 
-Run the deployment script. It starts the container even when the Git commit is already current:
+Inspect it:
 
 ```bash
-./scripts/sync-deploy.sh
-docker compose logs -f --tail=100
+docker compose ps
+docker compose logs --since=5m -f
 ```
 
-## 5. Install the cron job
+The container executes:
 
-Install and enable cron if necessary:
+```text
+python -m bot.main
+```
+
+## Deployment
+
+Deployment flow:
+
+```text
+push to main
+      ↓
+GitHub Actions validates the project
+      ↓
+validated commit is published to deploy
+      ↓
+Pi cron job runs the sync script
+      ↓
+Pi fetches deploy and rebuilds the container
+```
+
+The repository is located at:
+
+```text
+/home/ubuntu/apps/vrevel-creature-bot
+```
+
+The Pi deployment script is intentionally outside the repository:
+
+```text
+/home/ubuntu/apps/sync-vrevel-creature-bot.sh
+```
+
+This prevents `git reset --hard origin/deploy` from replacing the deployment script.
+
+### Cron job
+
+Make the script executable:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y cron util-linux
-sudo systemctl enable --now cron
+chmod +x /home/ubuntu/apps/sync-vrevel-creature-bot.sh
 ```
 
-Ensure the deployment script is executable:
+Open the user crontab:
 
 ```bash
-chmod +x ~/apps/vrevel-creature-bot/scripts/sync-deploy.sh
+EDITOR=nvim crontab -e
 ```
 
-Edit the `ubuntu` user's crontab:
-
-```bash
-crontab -e
-```
-
-Add this line to check every two minutes:
+Add:
 
 ```cron
-*/2 * * * * /home/ubuntu/apps/vrevel-creature-bot/scripts/sync-deploy.sh >> /home/ubuntu/vrevel-creature-bot-deploy.log 2>&1
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+*/2 * * * * /usr/bin/flock -n /tmp/vrevel-creature-bot-deploy.lock /home/ubuntu/apps/sync-vrevel-creature-bot.sh >> /home/ubuntu/apps/vrevel-creature-bot-deploy.log 2>&1
 ```
 
 Verify:
@@ -139,33 +394,20 @@ Verify:
 crontab -l
 ```
 
-Watch deployment output:
+Read deployment logs:
 
 ```bash
-tail -f ~/vrevel-creature-bot-deploy.log
+tail -f /home/ubuntu/apps/vrevel-creature-bot-deploy.log
 ```
 
-The script uses `flock`, so overlapping cron executions exit instead of running two Docker builds concurrently.
+## Normal development workflow
 
-## Routine deployment
-
-On your development computer:
+On the development computer:
 
 ```bash
 git add .
-git commit -m "Describe the change"
+git commit -m "Add creature command"
 git push
 ```
 
-After GitHub validates the commit and updates `deploy`, the Pi deploys it within approximately two minutes.
-
-## Useful Pi commands
-
-```bash
-cd ~/apps/vrevel-creature-bot
-
-docker compose ps
-docker compose logs -f --tail=100
-docker compose restart
-./scripts/sync-deploy.sh
-```
+After GitHub updates the `deploy` branch, the Pi deploys the change during the next cron run.
