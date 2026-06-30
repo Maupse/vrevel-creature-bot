@@ -30,7 +30,7 @@ The structure has three important levels:
 bot/main.py
     loads
         ↓
-bot/extensions/general.py          ← Discord.py extension
+bot/extensions/general.py          ← discord.py extension
     contains
         ↓
 class General(commands.Cog)        ← cog
@@ -39,7 +39,7 @@ class General(commands.Cog)        ← cog
 /ping, /about, ...                 ← commands
 ```
 
-### What is a Discord.py extension?
+### What is a discord.py extension?
 
 An **extension** is an importable Python module that the bot can load.
 
@@ -92,7 +92,7 @@ A future `Creatures` cog could contain:
 The distinction is:
 
 ```text
-extension = Python module/file loaded by the bot
+extension = Python module or file loaded by the bot
 cog       = class inside the extension
 command   = method inside the cog
 ```
@@ -105,124 +105,11 @@ extensions/creatures.py  → Creatures cog
 extensions/admin.py      → Admin cog
 ```
 
-## Core files
-
-### `bot/main.py`
-
-`main.py` starts the bot, loads extensions, and synchronizes slash commands to the configured Discord server.
-
-```python
-import logging
-import os
-
-import discord
-from discord.ext import commands
-
-
-TOKEN = os.environ["DISCORD_TOKEN"]
-GUILD_ID = int(os.environ["DISCORD_GUILD_ID"])
-
-EXTENSIONS = (
-    "bot.extensions.general",
-)
-
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
-
-logger = logging.getLogger("vrevel_creature_bot")
-
-
-class VrevelCreatureBot(commands.Bot):
-    def __init__(self) -> None:
-        super().__init__(
-            command_prefix=commands.when_mentioned,
-            intents=discord.Intents.default(),
-        )
-
-    async def setup_hook(self) -> None:
-        for extension in EXTENSIONS:
-            await self.load_extension(extension)
-            logger.info("Loaded extension %s", extension)
-
-        guild = discord.Object(id=GUILD_ID)
-
-        # Make the commands available immediately in this server.
-        self.tree.copy_global_to(guild=guild)
-        synced = await self.tree.sync(guild=guild)
-
-        logger.info(
-            "Synced %d command(s) to guild %d",
-            len(synced),
-            GUILD_ID,
-        )
-
-    async def on_ready(self) -> None:
-        logger.info(
-            "Logged in as %s (id=%s)",
-            self.user,
-            self.user.id if self.user else None,
-        )
-
-
-def main() -> None:
-    bot = VrevelCreatureBot()
-    bot.run(TOKEN, log_handler=None)
-
-
-if __name__ == "__main__":
-    main()
-```
-
-### `bot/extensions/general.py`
-
-`general.py` contains small general-purpose commands.
-
-```python
-import discord
-from discord import app_commands
-from discord.ext import commands
-
-
-class General(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
-        self.bot = bot
-
-    @app_commands.command(
-        name="ping",
-        description="Check whether the bot is online.",
-    )
-    async def ping(self, interaction: discord.Interaction) -> None:
-        latency_ms = round(self.bot.latency * 1000)
-
-        await interaction.response.send_message(
-            f"Pong! `{latency_ms} ms`",
-            ephemeral=True,
-        )
-
-    @app_commands.command(
-        name="about",
-        description="Show information about the bot.",
-    )
-    async def about(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_message(
-            "I am vrevel-creature.",
-            ephemeral=True,
-        )
-
-
-async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(General(bot))
-```
-
-The empty `__init__.py` files make `bot` and `bot.extensions` importable Python packages.
-
 ## Adding commands
 
 ### Add a related command
 
-Add it to the existing cog.
+Add the command to the existing cog.
 
 For example, add `/hello` inside the `General` class in `bot/extensions/general.py`:
 
@@ -241,9 +128,13 @@ async def hello(self, interaction: discord.Interaction) -> None:
 
 Create a new extension when commands belong to a distinct feature.
 
+Create:
+
 ```text
 bot/extensions/creatures.py
 ```
+
+Add:
 
 ```python
 import discord
@@ -277,14 +168,310 @@ EXTENSIONS = (
 
 Keep the structure small until the code requires another layer:
 
-| Situation | Action |
-|---|---|
-| A new command belongs to an existing feature | Add it to the existing cog |
-| Several commands form a distinct feature | Create a new extension and cog |
+| Situation                                     | Action                                      |
+| --------------------------------------------- | ------------------------------------------- |
+| A new command belongs to an existing feature  | Add it to the existing cog                  |
+| Several commands form a distinct feature      | Create a new extension and cog              |
 | A command contains substantial reusable logic | Move that logic into a service module later |
-| Code is used by only one short command | Keep it in the extension |
+| Code is used by only one short command        | Keep it in the extension                    |
 
 Do not add `services/`, `utils/`, repositories, or database abstractions before there is real logic to place there.
+
+## Git development workflow
+
+Do not make changes directly on the `main` branch.
+
+Create a separate branch for each feature, fix, or maintenance task. When the work is ready, push the branch to GitHub and open a pull request into `main`.
+
+GitHub calls this a **pull request**. GitLab and some other platforms call the same concept a **merge request**.
+
+The workflow is:
+
+```text
+update local main
+      ↓
+create a feature branch
+      ↓
+make and commit changes
+      ↓
+push the feature branch
+      ↓
+open a pull request into main
+      ↓
+review and approval
+      ↓
+merge into main
+```
+
+### 1. Clone the repository
+
+This is only required the first time:
+
+```bash
+git clone https://github.com/OWNER/vrevel-creature-bot.git
+cd vrevel-creature-bot
+```
+
+Replace `OWNER` with the GitHub username or organization that owns the repository.
+
+### 2. Update the local `main` branch
+
+Before starting new work, switch to `main` and download the latest changes:
+
+```bash
+git switch main
+git pull --ff-only origin main
+```
+
+The `--ff-only` option prevents Git from creating an unexpected merge commit while updating the local branch.
+
+### 3. Create a side branch
+
+Create a new branch with a descriptive name:
+
+```bash
+git switch -c feature/add-creature-command
+```
+
+Common branch-name prefixes include:
+
+```text
+feature/   new functionality
+fix/       bug fixes
+docs/      documentation changes
+refactor/  internal code restructuring
+chore/     maintenance work
+```
+
+Examples:
+
+```text
+feature/add-creature-command
+fix/ping-latency
+docs/update-readme
+refactor/extension-loading
+```
+
+Keep branch names short, lowercase, and descriptive.
+
+### 4. Make the changes
+
+Edit the required files:
+
+```bash
+nvim bot/extensions/general.py
+```
+
+Inspect the current changes:
+
+```bash
+git status
+git diff
+```
+
+### 5. Stage and commit the changes
+
+Stage the relevant files:
+
+```bash
+git add bot/extensions/general.py
+```
+
+Or stage all changes:
+
+```bash
+git add .
+```
+
+Create a commit:
+
+```bash
+git commit -m "Add creature command"
+```
+
+A commit message should briefly describe what the commit changes.
+
+Good examples:
+
+```text
+Add creature command
+Fix incorrect latency calculation
+Document feature branch workflow
+Refactor extension loading
+```
+
+### 6. Push the side branch
+
+Push the branch to GitHub:
+
+```bash
+git push -u origin feature/add-creature-command
+```
+
+The `-u` option connects the local branch to the corresponding remote branch.
+
+After the first push, future pushes from the same branch can use:
+
+```bash
+git push
+```
+
+### 7. Open a pull request
+
+On GitHub:
+
+1. Open the repository.
+2. Select **Pull requests**.
+3. Select **New pull request**.
+4. Set the base branch to `main`.
+5. Set the compare branch to the side branch.
+6. Review the displayed changes.
+7. Add a clear title and description.
+8. Select **Create pull request**.
+
+Example:
+
+```text
+base:    main
+compare: feature/add-creature-command
+```
+
+A useful pull request description should explain:
+
+```text
+What changed?
+Why was it changed?
+How was it tested?
+Are there any known limitations?
+```
+
+Example:
+
+```text
+Adds a new /creature slash command.
+
+The command currently responds with a fixed message.
+
+Tested by running the bot locally and invoking /creature in the
+development Discord server.
+```
+
+### 8. Review and approval
+
+The pull request should be reviewed before it is merged.
+
+A reviewer may:
+
+* approve the changes;
+* request changes;
+* leave comments or questions;
+* identify bugs or missing tests.
+
+When changes are requested, update the same local side branch:
+
+```bash
+nvim bot/extensions/creatures.py
+git add bot/extensions/creatures.py
+git commit -m "Address pull request review"
+git push
+```
+
+The existing pull request updates automatically after the new commits are pushed.
+
+Do not create a new pull request for every review change.
+
+### 9. Keep the branch up to date
+
+If `main` changes while the pull request is open, update the side branch:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git switch feature/add-creature-command
+git merge main
+```
+
+If there are conflicts, Git marks the conflicting files. Resolve them manually, then run:
+
+```bash
+git add .
+git commit
+git push
+```
+
+For this project, merging `main` into the feature branch is preferred over rewriting shared branch history.
+
+Avoid using force-push unless you understand the consequences.
+
+### 10. Merge the pull request
+
+After the required review and automated checks pass, merge the pull request through GitHub.
+
+Depending on the repository settings, GitHub may provide:
+
+* **Merge commit**
+* **Squash and merge**
+* **Rebase and merge**
+
+For small feature branches, **Squash and merge** is usually the simplest option because it creates one clean commit on `main`.
+
+Do not merge when:
+
+* required checks are failing;
+* requested changes are unresolved;
+* the branch has unresolved conflicts;
+* the reviewer has not approved the changes.
+
+### 11. Delete the completed branch
+
+After the pull request has been merged, delete the remote branch using GitHub's **Delete branch** button.
+
+Then clean up the local branch:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git branch -d feature/add-creature-command
+```
+
+The `-d` option refuses to delete a branch that Git does not consider merged.
+
+### Complete example
+
+```bash
+# Update main.
+git switch main
+git pull --ff-only origin main
+
+# Create a side branch.
+git switch -c feature/add-creature-command
+
+# Edit the project.
+nvim bot/extensions/creatures.py
+
+# Inspect and commit the changes.
+git status
+git diff
+git add bot/extensions/creatures.py bot/main.py
+git commit -m "Add creature command"
+
+# Push the side branch.
+git push -u origin feature/add-creature-command
+```
+
+Then open a pull request on GitHub:
+
+```text
+feature/add-creature-command → main
+```
+
+After the pull request is approved and merged:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git branch -d feature/add-creature-command
+```
 
 ## Environment configuration
 
@@ -340,7 +527,7 @@ python -m bot.main
 Deployment flow:
 
 ```text
-push to main
+merge pull request into main
       ↓
 GitHub Actions validates the project
       ↓
@@ -402,12 +589,20 @@ tail -f /home/ubuntu/apps/vrevel-creature-bot-deploy.log
 
 ## Normal development workflow
 
-On the development computer:
+Use a separate branch for every change:
 
 ```bash
+git switch main
+git pull --ff-only origin main
+git switch -c feature/short-description
+
+# Make changes.
+
 git add .
-git commit -m "Add creature command"
-git push
+git commit -m "Describe the change"
+git push -u origin feature/short-description
 ```
 
-After GitHub updates the `deploy` branch, the Pi deploys the change during the next cron run.
+Open a pull request from the side branch into `main`.
+
+After the pull request is reviewed, approved, and merged, GitHub updates the `deploy` branch through the deployment workflow. The Pi deploys the change during the next cron run.
