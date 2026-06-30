@@ -473,34 +473,6 @@ git pull --ff-only origin main
 git branch -d feature/add-creature-command
 ```
 
-## Environment configuration
-
-The Pi-only environment file is:
-
-```text
-/home/ubuntu/apps/vrevel-creature-bot/.env
-```
-
-Create it with:
-
-```bash
-cd /home/ubuntu/apps/vrevel-creature-bot
-cp .env.example .env
-nvim .env
-chmod 600 .env
-```
-
-Contents:
-
-```dotenv
-DISCORD_TOKEN=your-real-discord-bot-token
-DISCORD_GUILD_ID=your-numeric-discord-server-id
-LOG_LEVEL=INFO
-```
-
-The `.env` file must not be committed.
-
-
 ## Creating your own development bot on Windows
 
 Each developer should create a separate Discord bot application for local development and connect it to the existing **Vrevel-Labs** Discord server.
@@ -874,6 +846,35 @@ DISCORD_TOKEN     = production bot token
 DISCORD_GUILD_ID  = production server ID
 LOG_LEVEL         = INFO
 ```
+
+
+## Environment configuration
+
+The Pi-only environment file is:
+
+```text
+/home/ubuntu/apps/vrevel-creature-bot/.env
+```
+
+Create it with:
+
+```bash
+cd /home/ubuntu/apps/vrevel-creature-bot
+cp .env.example .env
+nvim .env
+chmod 600 .env
+```
+
+Contents:
+
+```dotenv
+DISCORD_TOKEN=your-real-discord-bot-token
+DISCORD_GUILD_ID=your-numeric-discord-server-id
+LOG_LEVEL=INFO
+```
+
+The `.env` file must not be committed.
+
 
 
 ## Docker
