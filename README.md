@@ -544,6 +544,20 @@ Each developer should use their own Discord application and bot token.
 
 Do not reuse the production Discord application.
 
+Just like the production bot on the server needs a `.env` a dev bot needs the following `.env` file in the project root **THAT SHOULD NOT BE COMMITED EVER!**
+
+This template can be copied from .env.example, the .env is ingored by .gitignore, do never change that!
+```env
+# Copy this file to .env on the Raspberry Pi. Never commit the real token.
+DISCORD_TOKEN=replace-me
+
+# Optional: your test Discord server ID. Slash commands appear there quickly.
+# Remove this variable to register commands globally instead.
+DISCORD_GUILD_ID=123456789012345678
+
+LOG_LEVEL=INFO
+```
+
 ## 2. Obtain the development bot token
 
 Open the application and select:
@@ -556,7 +570,7 @@ Use **Reset Token** or **Copy Token** to obtain the bot token.
 
 The token authenticates the bot and must be treated like a password.
 
-Never:
+**Never, NEVER DO THE FOLLOWING**:
 
 * commit the token to Git;
 * paste it into the source code;
