@@ -500,6 +500,368 @@ LOG_LEVEL=INFO
 
 The `.env` file must not be committed.
 
+
+## Creating your own development bot on Windows
+
+Each developer should create a separate Discord bot application for local development and connect it to the existing **Vrevel-Labs** Discord server.
+
+Do not use the production bot token on a development computer. A separate development bot prevents unfinished code, command changes, and crashes from affecting the production bot.
+
+The setup is:
+
+```text
+production Discord application
+    ↓
+production bot
+    ↓
+production Discord server
+
+developer Discord application
+    ↓
+developer bot
+    ↓
+Vrevel-Labs development server
+```
+
+## 1. Create a Discord application
+
+Open the Discord Developer Portal and select:
+
+```text
+New Application
+```
+
+Give the application a recognizable name that identifies both the project and the developer.
+
+Examples:
+
+```text
+vrevel-creature-bot-dev-maups
+vrevel-creature-bot-dev-vikk
+```
+
+Each developer should use their own Discord application and bot token.
+
+Do not reuse the production Discord application.
+
+## 2. Obtain the development bot token
+
+Open the application and select:
+
+```text
+Bot
+```
+
+Use **Reset Token** or **Copy Token** to obtain the bot token.
+
+The token authenticates the bot and must be treated like a password.
+
+Never:
+
+* commit the token to Git;
+* paste it into the source code;
+* send it in Discord;
+* include it in screenshots;
+* reuse the production token for development.
+
+If a token is exposed, reset it immediately in the Discord Developer Portal.
+
+The current bot uses only the default Discord intents. Do not enable privileged intents unless a future feature explicitly requires them.
+
+## 3. Install the development bot in Vrevel-Labs
+
+In the Discord Developer Portal, open:
+
+```text
+Installation
+```
+
+Configure a Discord-provided installation link for a server installation.
+
+Select these scopes:
+
+```text
+bot
+applications.commands
+```
+
+Grant only the permissions required by the bot. For the current commands, these permissions are sufficient:
+
+```text
+View Channels
+Send Messages
+```
+
+Copy the installation link and open it in a browser.
+
+Select the existing development server:
+
+```text
+Vrevel-Labs
+```
+
+You must have permission to add applications to the server. Contact a Vrevel-Labs administrator if the server does not appear in the list.
+
+The bot will initially appear offline because the Python program is not running yet.
+
+## 4. Obtain the Vrevel-Labs server ID
+
+In the Discord desktop application:
+
+1. Open **User Settings**.
+2. Open **Advanced**.
+3. Enable **Developer Mode**.
+4. Right-click the **Vrevel-Labs** server icon.
+5. Select **Copy Server ID**.
+
+The copied numeric value is the development `DISCORD_GUILD_ID`.
+
+Example:
+
+```text
+123456789012345678
+```
+
+All developers testing inside Vrevel-Labs use the same server ID, but each developer uses their own bot token.
+
+The local configuration therefore has this structure:
+
+```text
+DISCORD_TOKEN     = your personal development bot token
+DISCORD_GUILD_ID  = the shared Vrevel-Labs server ID
+```
+
+Do not use the production server ID for local development.
+
+## 5. Install Python and Git
+
+Install current versions of:
+
+* Python 3;
+* Git for Windows;
+* Neovim, or another editor.
+
+Verify the installations in PowerShell:
+
+```powershell
+py --version
+git --version
+nvim --version
+```
+
+## 6. Clone the repository
+
+Open PowerShell and run:
+
+```powershell
+git clone https://github.com/OWNER/vrevel-creature-bot.git
+Set-Location vrevel-creature-bot
+```
+
+Replace `OWNER` with the GitHub username or organization that owns the repository.
+
+## 7. Create a Python virtual environment
+
+Create a project-local virtual environment:
+
+```powershell
+py -3 -m venv .venv
+```
+
+Activate it:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+The PowerShell prompt should now begin with:
+
+```text
+(.venv)
+```
+
+Install the project dependencies:
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+If PowerShell prevents `Activate.ps1` from running, activation is optional. Use the virtual environment's Python executable directly:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Do not commit the `.venv` directory. It should be included in `.gitignore`.
+
+## 8. Configure the development environment
+
+There are two supported ways to provide the development credentials.
+
+### Option A: PowerShell environment variables
+
+Set the variables in the current PowerShell session:
+
+```powershell
+$env:DISCORD_TOKEN = "your-personal-development-bot-token"
+$env:DISCORD_GUILD_ID = "the-vrevel-labs-server-id"
+$env:LOG_LEVEL = "DEBUG"
+```
+
+These variables exist only in the current PowerShell process. Closing the terminal removes them.
+
+Run the bot:
+
+```powershell
+python -m bot.main
+```
+
+Without virtual-environment activation, use:
+
+```powershell
+$env:DISCORD_TOKEN = "your-personal-development-bot-token"
+$env:DISCORD_GUILD_ID = "the-vrevel-labs-server-id"
+$env:LOG_LEVEL = "DEBUG"
+
+.\.venv\Scripts\python.exe -m bot.main
+```
+
+### Option B: Docker Desktop and `.env`
+
+Install Docker Desktop, then create a local `.env` file:
+
+```powershell
+Copy-Item .env.example .env
+nvim .env
+```
+
+Add the development credentials:
+
+```dotenv
+DISCORD_TOKEN=your-personal-development-bot-token
+DISCORD_GUILD_ID=the-vrevel-labs-server-id
+LOG_LEVEL=DEBUG
+```
+
+Start the bot:
+
+```powershell
+docker compose up --build
+```
+
+Stop it with:
+
+```text
+Ctrl+C
+```
+
+Run it in the background with:
+
+```powershell
+docker compose up -d --build
+```
+
+Inspect the logs:
+
+```powershell
+docker compose logs --since=5m -f
+```
+
+Stop and remove the development container:
+
+```powershell
+docker compose down
+```
+
+The `.env` file contains secrets and must never be committed.
+
+Verify that Git ignores it:
+
+```powershell
+git status
+```
+
+The `.env` file should not appear as an untracked file.
+
+## 9. Test the bot in Vrevel-Labs
+
+After the bot starts, the terminal should report that:
+
+* the extension was loaded;
+* commands were synchronized;
+* the bot logged in successfully.
+
+Because commands are synchronized to the Vrevel-Labs server ID, the slash commands should become available quickly inside Vrevel-Labs.
+
+Test:
+
+```text
+/ping
+/about
+```
+
+Several development bots may be present in Vrevel-Labs at the same time. Confirm that you are selecting your own bot when testing commands.
+
+Use a distinctive bot name such as:
+
+```text
+vrevel-creature-bot-dev-maups
+```
+
+This makes it easier to distinguish development bots from each other and from the production bot.
+
+## 10. Stop the local bot
+
+For direct Python execution, press:
+
+```text
+Ctrl+C
+```
+
+Deactivate the virtual environment:
+
+```powershell
+deactivate
+```
+
+For Docker execution:
+
+```powershell
+docker compose down
+```
+
+## Development safety rules
+
+| Rule                                                  | Reason                                                        |
+| ----------------------------------------------------- | ------------------------------------------------------------- |
+| Use a separate Discord application for each developer | Prevents developers from sharing bot credentials              |
+| Use the Vrevel-Labs server for testing                | Keeps development activity out of production                  |
+| Use a personal development token                      | Prevents local code from authenticating as the production bot |
+| Never commit `.env`                                   | Prevents credential exposure                                  |
+| Enable only required permissions                      | Reduces the impact of mistakes                                |
+| Use a distinctive bot name                            | Makes concurrent development bots easy to identify            |
+| Use `LOG_LEVEL=DEBUG` locally                         | Provides more diagnostic information                          |
+| Reset an exposed token immediately                    | Invalidates the compromised credential                        |
+
+A developer's local configuration should therefore use:
+
+```text
+DISCORD_TOKEN     = personal development bot token
+DISCORD_GUILD_ID  = shared Vrevel-Labs server ID
+LOG_LEVEL         = DEBUG
+```
+
+The Raspberry Pi continues to use:
+
+```text
+DISCORD_TOKEN     = production bot token
+DISCORD_GUILD_ID  = production server ID
+LOG_LEVEL         = INFO
+```
+
+
 ## Docker
 
 Build and start the bot:
@@ -606,3 +968,4 @@ git push -u origin feature/short-description
 Open a pull request from the side branch into `main`.
 
 After the pull request is reviewed, approved, and merged, GitHub updates the `deploy` branch through the deployment workflow. The Pi deploys the change during the next cron run.
+
