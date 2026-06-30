@@ -640,7 +640,7 @@ nvim --version
 Open PowerShell and run:
 
 ```powershell
-git clone https://github.com/OWNER/vrevel-creature-bot.git
+git clone https://github.com/Maupse/vrevel-creature-bot
 Set-Location vrevel-creature-bot
 ```
 
